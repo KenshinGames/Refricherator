@@ -48,6 +48,9 @@ export function makeMemoryStore(): Store & { dump(): { items: (Item & { gone?: b
     async recentRecipes(limit) {
       return recipes.slice(-limit).reverse().map((r) => ({ ...r }));
     },
+    async countImages(sinceIso) {
+      return recipes.filter((r) => r.imageUrl && r.createdAt >= new Date(sinceIso).toISOString()).length;
+    },
     async uploadImage(_path, bytes, mime) {
       return `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`;
     },

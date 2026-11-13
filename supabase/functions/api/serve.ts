@@ -82,6 +82,14 @@ const store: Store = {
   async recentRecipes(limit) {
     return must(await sb.from('recipes').select('*').order('created_at', { ascending: false }).limit(limit)).map(toRecipe);
   },
+  async countImages(sinceIso) {
+    const res = await sb.from('recipes').select('id', { count: 'exact', head: true }).not('image_url', 'is', null).gte('created_at', sinceIso);
+    if (res.error) {
+      console.error('db error', res.error.message);
+      throw new AppError('db', '保存先とのやりとりに失敗しました。もう一度お試しください。', 500);
+    }
+    return res.count ?? 0;
+  },
   async uploadImage(path, bytes, mime) {
     const up = await sb.storage.from('dishes').upload(path, bytes, { contentType: mime, upsert: true, cacheControl: '31536000' });
     if (up.error) {

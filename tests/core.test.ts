@@ -259,6 +259,13 @@ describe('写真', () => {
     expect(await t.call('image', { id: recipes[2].id })).toEqual({ capped: true });
     expect((await t.call('sync')).usage.images).toBe(2);
   });
+  it('3枚を同時に頼まれても、数えもれしない', async () => {
+    const t = setup();
+    await t.call('add', { items: [{ name: '卵', category: '卵・乳製品', days: 14 }] });
+    const { recipes } = (await t.call('suggest', { scene: 'tired' })) as { recipes: Recipe[] };
+    await Promise.all(recipes.map((r) => t.call('image', { id: r.id })));
+    expect((await t.call('sync')).usage.images).toBe(3);
+  });
   it('ないレシピは 404', async () => {
     await expect(setup().call('image', { id: 'nope' })).rejects.toMatchObject({ status: 404 });
   });

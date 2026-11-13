@@ -44,7 +44,7 @@ export interface State {
   ideaRecipe: Record<string, string>; // 「買うもの|料理名」→ レシピの ID
   ideaLoading: Record<string, boolean>;
   ideaError: Record<string, string>;
-  toast: { id: number; text: string } | null;
+  toast: { id: number; text: string; action?: { label: string; run: () => void } } | null;
 }
 
 let state: State = {
@@ -175,12 +175,18 @@ function fridgeKey(items: Item[]): string {
 export const ideaKey = (i: { buy: string; dish: string }): string => `${i.buy}|${i.dish}`;
 
 let toastSeq = 0;
-export function toast(text: string): void {
+export function toast(text: string, action?: { label: string; run: () => void }): void {
   const id = ++toastSeq;
-  set({ toast: { id, text } });
-  setTimeout(() => {
-    if (state.toast?.id === id) set({ toast: null });
-  }, 3200);
+  set({ toast: { id, text, action } });
+  setTimeout(
+    () => {
+      if (state.toast?.id === id) set({ toast: null });
+    },
+    action ? 5000 : 2600,
+  );
+}
+export function closeToast(): void {
+  set({ toast: null });
 }
 
 // ───────── 起動と合言葉 ─────────
@@ -193,13 +199,20 @@ interface SyncResult {
   limits: State['limits'];
 }
 
+export function isStandalone(): boolean {
+  return (navigator as { standalone?: boolean }).standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+}
+
 export function boot(): void {
   loadCache();
   // 合言葉入りのリンク(…/#k=合言葉)で開いたら、そのまま使えるようにする
+  // iPhone では「ホーム画面に追加」したアプリは Safari と保存場所が別になるので、
+  // ブラウザで見ている間は合言葉を URL(?k=)に残し、追加したアプリにも引き継がれるようにする。
   const m = location.hash.match(/[#&]k=([^&]+)/) ?? location.search.match(/[?&]k=([^&]+)/);
   if (m) {
     state = { ...state, pass: decodeURIComponent(m[1]) };
-    history.replaceState(null, '', location.pathname);
+    const route = location.hash.startsWith('#/') ? location.hash : '';
+    history.replaceState(null, '', location.pathname + (isStandalone() ? '' : `?k=${m[1]}`) + route);
     schedulePersist();
   }
   if (state.pass) void sync();
@@ -230,6 +243,25 @@ export function leave(): void {
 
 function applySync(r: SyncResult): void {
   set({ items: sortItems(r.items), settings: r.settings, staples: r.staples, usage: r.usage, limits: r.limits, synced: true });
+  prewarmSoon(600);
+}
+
+/** 今いちばん開きそうな場面(平日は「つかれた日」、土日は「休みの日」) */
+export function likelyScene(now = new Date()): Scene {
+  const day = now.getDay();
+  return day === 0 || day === 6 ? 'holiday' : 'tired';
+}
+let prewarmTimer: number | undefined;
+/**
+ * 開きそうな場面の提案を、文字だけ先に用意しておく(押したときにすぐ出せるように)。
+ * 写真はお金がかかるので、実際にその場面を開いたときに作る。
+ */
+function prewarmSoon(delay: number): void {
+  window.clearTimeout(prewarmTimer);
+  prewarmTimer = window.setTimeout(() => {
+    if (document.visibilityState !== 'visible' || !state.pass || !state.synced || pending > 0) return;
+    void loadScene(likelyScene(), false, false);
+  }, delay);
 }
 export async function sync(): Promise<void> {
   if (pending > 0) return;
@@ -252,7 +284,10 @@ function mutate(run: () => Promise<{ items: Item[]; staples?: Staple[] }>): Prom
       const r = await run();
       pending--;
       // 次の変更が待っている間は、手元の見た目を優先する
-      if (pending === 0) set({ items: sortItems(r.items), ...(r.staples ? { staples: r.staples } : {}) });
+      if (pending === 0) {
+        set({ items: sortItems(r.items), ...(r.staples ? { staples: r.staples } : {}) });
+        prewarmSoon(2500);
+      }
     } catch (e) {
       pending--;
       toast(message(e));
@@ -316,7 +351,7 @@ export function batchFor(s: State, scene: Scene): Recipe[] | null {
   return list.length ? list : null;
 }
 
-export async function loadScene(scene: Scene, another = false): Promise<void> {
+export async function loadScene(scene: Scene, another = false, withImages = true): Promise<void> {
   if (state.sceneLoading[scene]) return;
   if (!another && batchFor(state, scene)) return;
   if (!state.items.length) return;
@@ -332,9 +367,10 @@ export async function loadScene(scene: Scene, another = false): Promise<void> {
       batches: { ...state.batches, [scene]: { ids: r.recipes.map((x) => x.id), fridgeKey: fridgeKey(state.items), day: today() } },
       sceneLoading: { ...state.sceneLoading, [scene]: false },
     });
-    for (const rec of r.recipes) void loadImage(rec.id);
+    if (withImages) for (const rec of r.recipes) void loadImage(rec.id);
   } catch (e) {
-    set({ sceneLoading: { ...state.sceneLoading, [scene]: false }, sceneError: { ...state.sceneError, [scene]: message(e) } });
+    // 先回りの用意が失敗しただけなら、何も見せない(開いたときにもう一度試す)
+    set({ sceneLoading: { ...state.sceneLoading, [scene]: false }, sceneError: { ...state.sceneError, [scene]: withImages ? message(e) : undefined } });
   }
 }
 

@@ -79,6 +79,8 @@ export interface Store {
   getRecipe(id: string): Promise<Recipe | null>;
   updateRecipe(id: string, patch: { imageUrl?: string; cookedAt?: string }): Promise<void>;
   recentRecipes(limit: number): Promise<Recipe[]>;
+  /** その時刻より後に作ったレシピのうち、写真があるものの数 */
+  countImages(sinceIso: string): Promise<number>;
   uploadImage(path: string, bytes: Uint8Array, mime: string): Promise<string>;
 }
 
@@ -256,15 +258,18 @@ export async function passOk(given: string | null, storedHash: string | null): P
 // ───────── 本体 ─────────
 
 async function usage(d: Deps): Promise<{ key: string; value: Usage }> {
-  const key = 'usage:' + todayJst(d.now?.()).slice(0, 7);
-  return { key, value: (await d.store.getKv<Usage>(key)) ?? { images: 0, texts: 0 } };
+  const month = todayJst(d.now?.()).slice(0, 7);
+  const key = 'usage:' + month;
+  // 写真の数は、保存されたレシピから数える(同時に何枚か頼まれても数えもれしない)
+  const [saved, images] = await Promise.all([d.store.getKv<Usage>(key), d.store.countImages(`${month}-01T00:00:00+09:00`)]);
+  return { key, value: { texts: saved?.texts ?? 0, images } };
 }
 async function countText(d: Deps): Promise<void> {
   const u = await usage(d);
   if (u.value.texts >= (d.limits ?? DEFAULT_LIMITS).texts) {
     throw new AppError('limit', '今月の利用上限に達しました。来月になるとまた使えます。', 429);
   }
-  await d.store.setKv(u.key, { ...u.value, texts: u.value.texts + 1 });
+  await d.store.setKv(u.key, { texts: u.value.texts + 1 });
 }
 async function withDays(d: Deps): Promise<(Item & { daysLeft: number })[]> {
   const today = todayJst(d.now?.());
@@ -363,8 +368,6 @@ export async function handle(action: string, body: Record<string, unknown>, d: D
       if (recipe.imageUrl) return { url: recipe.imageUrl };
       const u = await usage(d);
       if (u.value.images >= limits.images) return { capped: true };
-      // 先に数える(同時に3枚頼まれても上限を越えにくくする)
-      await store.setKv(u.key, { ...u.value, images: u.value.images + 1 });
       const img = await ai.image(prompts.image(recipe));
       const ext = img.mime.includes('png') ? 'png' : 'jpg';
       const url = await store.uploadImage(`${recipe.id}.${ext}`, img.bytes, img.mime);

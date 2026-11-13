@@ -1,0 +1,55 @@
+// 公開した本物(GitHub Pages + Supabase + Gemini)を、スマホ大の画面で通しで動かす。写真3枚ぶん(約15円)かかる。
+//   node tools/e2e/prod.mjs
+import { readFileSync } from 'node:fs';
+import puppeteer from 'puppeteer-core';
+import { OUT, sleep } from './lib.mjs';
+
+const pass = readFileSync(new URL('../../.env.local', import.meta.url), 'utf8').match(/REFRICHERATOR_PASSCODE=(.+)/)[1].trim();
+const BASE = process.env.PROD_BASE ?? 'https://kenshingames.github.io/Refricherator/';
+const browser = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
+const page = await (await browser.createBrowserContext()).newPage();
+await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+const errors = [];
+page.on('pageerror', (e) => errors.push(String(e)));
+page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+const has = (t, timeout = 30000) => page.waitForFunction((x) => document.querySelector('.app')?.innerText.includes(x), { timeout }, t);
+const tap = (t) => page.evaluate((x) => { const els = [...document.querySelectorAll('button')].filter((b) => b.getBoundingClientRect().width && b.textContent.includes(x)); (els.find((e) => e.closest('.sheet')) ?? els[0]).click(); }, t);
+const shot = (n) => page.screenshot({ path: `${OUT}prod-${n}.png` });
+const time = async (label, fn) => { const t = Date.now(); await fn(); console.log(`${label}: ${Date.now() - t}ms`); };
+
+await time('合言葉入りのリンクで開く → ホーム', async () => { await page.goto(`${BASE}#k=${pass}`, { waitUntil: 'domcontentloaded' }); await has('なにを作ろう'); });
+console.log('URL から合言葉が消えている:', !page.url().includes(pass));
+await sleep(1300);
+await tap('冷蔵庫');
+await tap('話す・打つ');
+await page.waitForSelector('.sheet textarea');
+await page.type('.sheet textarea', '今日は鶏もも肉とキャベツと、あとしめじと卵を買ってきた');
+await time('文章の読み取り(本物の AI)', async () => { await tap('読み取る'); await has('品を見つけました'); });
+await shot('confirm');
+await tap('冷蔵庫に入れる');
+await sleep(600);
+await shot('fridge');
+await tap('ホーム');
+await tap('つかれた日');
+await time('提案の文字が出るまで', () => has('別の3品を見る', 40000));
+await shot('scene-text');
+await time('写真3枚がそろうまで', () => page.waitForFunction(() => document.querySelectorAll('.dish .photo img.on').length === 3, { timeout: 60000 }));
+await sleep(500);
+await shot('scene-photos');
+await page.evaluate(() => document.querySelector('.dish').click());
+await has('作り方');
+await sleep(400);
+await shot('recipe');
+await page.evaluate(() => document.querySelector('.screen').scrollTo(0, 700));
+await sleep(200);
+await shot('recipe-steps');
+await page.evaluate(() => history.back());
+await sleep(300);
+await page.evaluate(() => history.back());
+await has('なにを作ろう');
+await tap('買い物');
+await time('買い物の案が出るまで', () => has('を買うと', 30000));
+await sleep(300);
+await shot('shop');
+console.log('ブラウザのエラー:', errors.length ? errors : 'なし');
+await browser.close();

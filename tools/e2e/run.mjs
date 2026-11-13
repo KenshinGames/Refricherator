@@ -143,7 +143,7 @@ for (const size of sizes) {
   await check('17-home');
 
   // ── 提案:押した瞬間に次の画面が出て、中身はあとから届く ──
-  await quick('ホーム→提案', 'つかれた日', '考えています');
+  await quick('ホーム→提案', 'お弁当', '考えています');
   await check('18-scene-loading');
   await h.waitText('別の3品を見る');
   await check('19-scene-text');
@@ -173,7 +173,7 @@ for (const size of sizes) {
   expect(!(await apiCall('sync')).items.some((i) => i.name === usedName), `${usedName} がサーバーに残っている`);
 
   // ── もう一度同じ場面:冷蔵庫が変わったので作り直す。別の3品も試す ──
-  await h.tap('お弁当');
+  await h.tap('つかれた日');
   await h.waitText('別の3品を見る', 15000);
   await h.tap('別の3品を見る');
   await h.waitText('考えています', 1000);
@@ -212,7 +212,7 @@ for (const size of sizes) {
 
   // ── うまくいかないとき ──
   await apiTest({ fail: true, delay: 200 });
-  await h.page.evaluate(() => { location.hash = '/s/holiday'; window.dispatchEvent(new PopStateEvent('popstate')); });
+  await h.page.evaluate(() => { location.hash = '/s/bento'; window.dispatchEvent(new PopStateEvent('popstate')); });
   await h.waitText('提案を作れませんでした');
   await check('31-scene-error');
   await apiTest({ fail: false });
