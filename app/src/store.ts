@@ -199,20 +199,14 @@ interface SyncResult {
   limits: State['limits'];
 }
 
-export function isStandalone(): boolean {
-  return (navigator as { standalone?: boolean }).standalone === true || window.matchMedia('(display-mode: standalone)').matches;
-}
-
 export function boot(): void {
   loadCache();
   // 合言葉入りのリンク(…/#k=合言葉)で開いたら、そのまま使えるようにする
-  // iPhone では「ホーム画面に追加」したアプリは Safari と保存場所が別になるので、
-  // ブラウザで見ている間は合言葉を URL(?k=)に残し、追加したアプリにも引き継がれるようにする。
   const m = location.hash.match(/[#&]k=([^&]+)/) ?? location.search.match(/[?&]k=([^&]+)/);
   if (m) {
     state = { ...state, pass: decodeURIComponent(m[1]) };
-    const route = location.hash.startsWith('#/') ? location.hash : '';
-    history.replaceState(null, '', location.pathname + (isStandalone() ? '' : `?k=${m[1]}`) + route);
+    // 合言葉は読んだらすぐ URL から消す(サーバーや履歴に残さない)
+    history.replaceState(null, '', location.pathname);
     schedulePersist();
   }
   if (state.pass) void sync();

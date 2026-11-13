@@ -3,6 +3,7 @@
   "short_name": "Refricherator",
   "description": "冷蔵庫を、リッチに使い切る。",
   "lang": "ja",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
