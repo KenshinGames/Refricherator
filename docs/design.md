@@ -37,7 +37,7 @@ app/                      画面(Vite + React + TypeScript)
 supabase/functions/api/   中継サーバー(Supabase Edge Function)
   core.ts                 処理の本体(Supabase にも Gemini にも直接は触らない。テストできる)
   gemini.ts               Gemini の呼び出しと指示文
-  index.ts                Supabase 用の入口(保存先と Gemini をつなぐ)
+  serve.ts                Supabase 用の入口(保存先と Gemini をつなぐ)
 supabase/migrations/      テーブル
 tests/                    単体テスト(vitest)
 tools/                    手元用の API、画面の自動テスト
