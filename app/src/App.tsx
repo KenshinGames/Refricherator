@@ -2,9 +2,9 @@
 import { useEffect, useState } from 'react';
 import { IdeaScreen, RecipeScreen, SCENE_INFO, SceneScreen } from './Cook.tsx';
 import { Fridge } from './Fridge.tsx';
-import { daysLeft, enter, leave, loadShopping, saveSettings, useStore } from './store.ts';
+import { batchFor, daysLeft, enter, leave, likelyScene, loadShopping, saveSettings, useStore } from './store.ts';
 import type { Scene } from './store.ts';
-import { back, go, Icon, ideaPath, Stamp, Stepper, Toast, useRoute, useVisualViewport } from './ui.tsx';
+import { back, go, Icon, ideaPath, leftLabel, leftTone, Ring, Stepper, Toast, useRoute, useVisualViewport } from './ui.tsx';
 
 const SCENE_ORDER: Scene[] = ['tired', 'holiday', 'bento'];
 const WEEK = ['日', '月', '火', '水', '木', '金', '土'];
@@ -20,7 +20,7 @@ export function App() {
     <div className="app">
       {pass && (
         <>
-          <main className="stage" key={key}>
+          <main className={tab ? 'stage stage-tabs' : 'stage'} key={key}>
             {route.name === 'home' && <Home />}
             {route.name === 'fridge' && <Fridge />}
             {route.name === 'shop' && <Shop />}
@@ -111,10 +111,29 @@ function Door({ locked }: { locked: boolean }) {
 
 // ───────── ホーム ─────────
 
+function SceneCard({ scene, big }: { scene: Scene; big: boolean }) {
+  const info = SCENE_INFO[scene];
+  // 提案がもう用意できていれば、その1品目を見せる(写真があれば写真も)
+  const ids = useStore((s) => batchFor(s, scene)?.map((r) => r.id).join(',') ?? '');
+  const recipes = useStore((s) => s.recipes);
+  const ready = ids ? ids.split(',').map((id) => recipes[id]).filter(Boolean) : [];
+  const photo = ready.find((r) => r.imageUrl)?.imageUrl;
+  return (
+    <button className={`scene ${big ? 'scene-big' : ''}`} onClick={() => go(`/s/${scene}`)}>
+      <img src={photo ?? `./covers/${scene}.jpg`} alt="" decoding="async" />
+      <span className="scene-name">{info.name}</span>
+      <span className="scene-note">{big && ready.length ? `${ready[0].title} ほか${ready.length - 1}品` : info.note}</span>
+    </button>
+  );
+}
+
 function Home() {
   const items = useStore((s) => s.items);
   const now = new Date();
   const soon = items.filter((i) => daysLeft(i) <= 3).slice(0, 6);
+  // いま開きそうな場面(平日はつかれた日、土日は休みの日)を大きく出す
+  const first = likelyScene(now);
+  const order = [first, ...SCENE_ORDER.filter((s) => s !== first)];
   return (
     <div className="screen home">
       <header className="home-head">
@@ -125,51 +144,45 @@ function Home() {
           <Icon name="gear" size={22} />
         </button>
       </header>
-      <h1 className="ask">
-        {now.getHours() < 15 ? '今日は、' : '今夜は、'}
-        <br />
-        なにを作ろう。
-      </h1>
+      <h1 className="ask">{now.getHours() < 15 ? '今日、なに作る?' : '今夜、なに作る?'}</h1>
 
-      <div className="shelves">
-        {SCENE_ORDER.map((s) => (
-          <button key={s} className="shelf" onClick={() => go(`/s/${s}`)}>
-            <Icon name={SCENE_INFO[s].icon} size={28} />
-            <span className="shelf-text">
-              <span className="shelf-name">{SCENE_INFO[s].name}</span>
-              <span className="shelf-note">{SCENE_INFO[s].note}</span>
-            </span>
-            <Icon name="right" size={20} />
-          </button>
+      <div className="scenes">
+        {order.map((s, n) => (
+          <SceneCard key={s} scene={s} big={n === 0} />
         ))}
       </div>
 
       <section className="soon">
         {items.length === 0 ? (
-          <>
-            <h2>冷蔵庫は空です</h2>
+          <div className="empty">
+            <p className="empty-title">冷蔵庫は空です</p>
+            <p>家にあるものを入れると、それに合わせた料理を提案します。</p>
             <button className="btn" onClick={() => go('/fridge', true)}>
               食材を入れる
             </button>
-          </>
-        ) : soon.length === 0 ? (
-          <>
-            <h2>そろそろ使い切りたい</h2>
-            <p className="quiet">急いで使うものはありません。</p>
-          </>
+          </div>
         ) : (
           <>
-            <h2>そろそろ使い切りたい</h2>
-            <ul className="soon-list">
-              {soon.map((i) => (
-                <li key={i.id}>
-                  <button onClick={() => go('/fridge', true)}>
-                    <span>{i.name}</span>
-                    <Stamp days={daysLeft(i)} />
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="sec-head">
+              <h2>そろそろ使い切りたい</h2>
+              <button className="sec-link" onClick={() => go('/fridge', true)}>
+                冷蔵庫を見る
+              </button>
+            </div>
+            {soon.length === 0 ? (
+              <p className="quiet">急いで使うものはありません。</p>
+            ) : (
+              <ul className="soon-list">
+                {soon.map((i) => (
+                  <li key={i.id}>
+                    <button onClick={() => go('/fridge', true)} aria-label={`${i.name} ${leftLabel(daysLeft(i))}`}>
+                      <Ring item={i} size={52} />
+                      {i.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </>
         )}
       </section>
@@ -231,7 +244,7 @@ function Shop() {
                     </span>
                     <span className="idea-dish">{i.dish}</span>
                     <span className="idea-uses">
-                      {i.uses.length > 0 && <>{i.uses.join('・')}を使う</>}
+                      {i.uses.length > 0 && <>{[...new Set(i.uses)].join('・')}を使う</>}
                       <span className="meta">
                         <Icon name="clock" size={15} />
                         {i.minutes}分
@@ -248,7 +261,7 @@ function Shop() {
             <h2>家にあるもの</h2>
             <ul className="have">
               {items.map((i) => (
-                <li key={i.id} className={daysLeft(i) <= 2 ? 'have-hot' : ''}>
+                <li key={i.id} className={`have-${leftTone(daysLeft(i))}`}>
                   {i.name}
                 </li>
               ))}

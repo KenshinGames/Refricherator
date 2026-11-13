@@ -45,7 +45,7 @@ for (const size of sizes) {
   await h.page.click('#pass', { clickCount: 3 });
   await h.page.type('#pass', 'test-pass');
   await h.tap('扉を開ける');
-  await h.waitText('なにを作ろう');
+  await h.waitText('なに作る');
   await sleep(1300);
   expect(!(await h.page.$('.door')), '扉が開いたあとも残っている');
   await check('03-home-empty');
@@ -139,7 +139,7 @@ for (const size of sizes) {
   await check('16-fridge-after-remove');
 
   // ── ホーム ──
-  await quick('冷蔵庫→ホーム', 'ホーム', 'なにを作ろう', { exact: true });
+  await quick('冷蔵庫→ホーム', 'ホーム', 'なに作る', { exact: true });
   await check('17-home');
 
   // ── 提案:押した瞬間に次の画面が出て、中身はあとから届く ──
@@ -167,7 +167,7 @@ for (const size of sizes) {
   const usedName = await h.page.$eval('.sheet .pick', (e) => e.textContent.trim());
   await h.tap(usedName, { exact: true });
   await h.tap('1品を冷蔵庫から出す');
-  await h.waitText('なにを作ろう');
+  await h.waitText('なに作る');
   await check('25-home-after-cooked');
   await sleep(900);
   expect(!(await apiCall('sync')).items.some((i) => i.name === usedName), `${usedName} がサーバーに残っている`);
@@ -179,7 +179,7 @@ for (const size of sizes) {
   await h.waitText('考えています', 1000);
   await h.waitText('別の3品を見る', 15000);
   await h.tap('もどる');
-  await h.waitText('なにを作ろう');
+  await h.waitText('なに作る');
 
   // ── 買い物 ──
   await quick('ホーム→買い物', '買い物', 'あと1つ買えば', { exact: true });

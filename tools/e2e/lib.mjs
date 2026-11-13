@@ -29,6 +29,9 @@ export async function openPage(browser, { size = 'iphone', pass = 'test-pass', p
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   await page.setViewport({ width, height, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  // E2E_DARK=1 のときは、ダークモードで確かめる(写しの名前に -dark が付く)
+  const dark = process.env.E2E_DARK === '1';
+  if (dark) await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => m.type() === 'error' && !/Failed to load resource/.test(m.text()) && errors.push(m.text()));
@@ -38,7 +41,7 @@ export async function openPage(browser, { size = 'iphone', pass = 'test-pass', p
     page,
     errors,
     size,
-    shot: (name) => page.screenshot({ path: `${OUT}${name}-${size}.png` }),
+    shot: (name) => page.screenshot({ path: `${OUT}${name}-${size}${dark ? '-dark' : ''}.png` }),
     /** 見えている文字で押す(ボタン・リンク) */
     async tap(text, { exact = false } = {}) {
       const ok = await page.evaluate(({ text, exact }) => {

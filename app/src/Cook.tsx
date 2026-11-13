@@ -10,6 +10,34 @@ export const SCENE_INFO: Record<Scene, { name: string; note: string; icon: strin
   bento: { name: 'お弁当', note: '明日の分を作っておく', icon: 'bento', waiting: '冷めてもおいしいものを考えています' },
 };
 
+/** レシピを見ている間は、画面が勝手に消えないようにする(対応している端末だけ) */
+function useWakeLock(): void {
+  useEffect(() => {
+    type Lock = { release(): Promise<void> };
+    const wl = (navigator as { wakeLock?: { request(type: 'screen'): Promise<Lock> } }).wakeLock;
+    if (!wl) return;
+    let lock: Lock | null = null;
+    let off = false;
+    const hold = () => {
+      if (document.visibilityState !== 'visible') return;
+      wl.request('screen').then(
+        (l) => {
+          if (off) void l.release();
+          else lock = l;
+        },
+        () => {},
+      );
+    };
+    hold();
+    document.addEventListener('visibilitychange', hold);
+    return () => {
+      off = true;
+      document.removeEventListener('visibilitychange', hold);
+      void lock?.release().catch(() => {});
+    };
+  }, []);
+}
+
 function TopBar({ title, fallback = '/' }: { title: string; fallback?: string }) {
   return (
     <header className="bar">
@@ -131,6 +159,8 @@ const SOURCE_LABEL = { fridge: '冷蔵庫から', buy: '買い足す', pantry: '
 function RecipeBody({ recipe }: { recipe: Recipe }) {
   const items = useStore((s) => s.items);
   const [asking, setAsking] = useState(false);
+  const [done, setDone] = useState<number[]>([]);
+  useWakeLock();
   const groups = (['fridge', 'buy', 'pantry'] as const).map((src) => ({ src, list: recipe.ingredients.filter((i) => i.source === src) })).filter((g) => g.list.length);
   const used = items.filter((i) => recipe.ingredients.some((g) => g.itemId === i.id));
 
@@ -170,12 +200,17 @@ function RecipeBody({ recipe }: { recipe: Recipe }) {
 
         <h2>作り方</h2>
         <ol className="steps">
-          {recipe.steps.map((s, n) => (
-            <li key={n}>
-              <span className="step-n">{n + 1}</span>
-              <span>{s}</span>
-            </li>
-          ))}
+          {recipe.steps.map((s, n) => {
+            const on = done.includes(n);
+            return (
+              <li key={n}>
+                <button className={on ? 'done' : ''} aria-pressed={on} onClick={() => setDone((d) => (on ? d.filter((x) => x !== n) : [...d, n]))}>
+                  <span className="step-n">{on ? <Icon name="check" size={18} /> : n + 1}</span>
+                  <span>{s}</span>
+                </button>
+              </li>
+            );
+          })}
         </ol>
 
         {recipe.tip && (
@@ -223,7 +258,7 @@ function CookedSheet({ recipe, used, onClose }: { recipe: Recipe; used: Item[]; 
       onClose={onClose}
       footer={
         <button className="btn" onClick={finish}>
-          {gone.length ? `${gone.length}品を冷蔵庫から出す` : used.length ? 'どれもまだ残っている' : 'ホームにもどる'}
+          {gone.length ? `${gone.length}品を冷蔵庫から出す` : used.length ? '使い切ったものはない' : 'ホームにもどる'}
         </button>
       }
     >

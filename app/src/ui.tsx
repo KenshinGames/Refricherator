@@ -1,8 +1,9 @@
 // 画面の部品(アイコン、下から出るシート、期限の印、料理写真、お知らせ)と、画面の行き来。
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
-import { loadImage, useStore } from './store.ts';
-import type { Recipe, Scene } from './store.ts';
+import { daysBetween } from '../../supabase/functions/api/core.ts';
+import { closeToast, daysLeft, loadImage, useStore } from './store.ts';
+import type { Item, Recipe, Scene } from './store.ts';
 
 // ───────── 画面の行き来 ─────────
 
@@ -131,15 +132,26 @@ export function Icon({ name, size = 24 }: { name: keyof typeof PATHS | string; s
   );
 }
 
-// ───────── 期限の印 ─────────
+// ───────── 鮮度の輪 ─────────
 
-export function Stamp({ days }: { days: number }) {
-  if (days < 0) return <span className="stamp stamp-over">期限すぎ</span>;
-  if (days === 0) return <span className="stamp stamp-hot">今日まで</span>;
-  const tone = days <= 2 ? 'stamp-hot' : days <= 7 ? 'stamp-week' : 'stamp-calm';
+export function leftLabel(days: number): string {
+  return days < 0 ? '期限すぎ' : days === 0 ? '今日まで' : `あと${days}日`;
+}
+export const leftTone = (days: number): 'hot' | 'warm' | 'fresh' => (days <= 1 ? 'hot' : days <= 3 ? 'warm' : 'fresh');
+
+/** 残りの日数で減っていく輪。入れた日から期限までを1周として、残りの割合を描く */
+export function Ring({ item, size = 44 }: { item: Item; size?: number }) {
+  const left = daysLeft(item);
+  const total = Math.max(1, daysBetween(item.addedOn, item.expiresOn));
+  const ratio = left <= 0 ? 1 : Math.max(0.08, Math.min(1, left / total));
+  const c = 2 * Math.PI * 19;
   return (
-    <span className={`stamp ${tone}`}>
-      あと<b>{days}</b>日
+    <span className={`ring ring-${leftTone(left)}`} style={{ width: size, height: size }} aria-hidden="true">
+      <svg viewBox="0 0 44 44" fill="none" strokeWidth="3">
+        <circle className="ring-track" cx="22" cy="22" r="19" />
+        <circle className="ring-arc" cx="22" cy="22" r="19" strokeDasharray={`${c * ratio} ${c}`} transform="rotate(-90 22 22)" />
+      </svg>
+      <span className={`ring-num ${left <= 0 ? 'ring-word' : ''}`}>{left < 0 ? 'すぎ' : left === 0 ? '今日' : left}</span>
     </span>
   );
 }
@@ -235,7 +247,17 @@ export function Toast() {
   if (!t) return null;
   return (
     <div className="toast" role="status" key={t.id}>
-      {t.text}
+      <span>{t.text}</span>
+      {t.action && (
+        <button
+          onClick={() => {
+            t.action!.run();
+            closeToast();
+          }}
+        >
+          {t.action.label}
+        </button>
+      )}
     </div>
   );
 }

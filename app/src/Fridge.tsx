@@ -2,9 +2,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { normName } from '../../supabase/functions/api/core.ts';
 import { lookup, quickParse, quickPicks } from './foods.ts';
-import { addItems, ApiError, daysLeft, parse, removeItems, setDays, toast, useStore } from './store.ts';
+import { addItems, ApiError, daysLeft, parse, removeItems, restoreItems, setDays, toast, useStore } from './store.ts';
 import type { Item, NewItem } from './store.ts';
-import { Icon, Sheet, Stamp, Stepper } from './ui.tsx';
+import { Icon, leftLabel, leftTone, Ring, Sheet, Stepper } from './ui.tsx';
 
 type AddMode = 'text' | 'picks' | 'receipt' | 'photo';
 
@@ -103,8 +103,12 @@ export function Fridge() {
               {g.list.map((i) => (
                 <li key={i.id}>
                   <button className="row" onClick={() => setEditing(i.id)}>
-                    <span className="row-name">{i.name}</span>
-                    <Stamp days={daysLeft(i)} />
+                    <Ring item={i} />
+                    <span className="row-main">
+                      <span className="row-name">{i.name}</span>
+                      <span className={`left left-${leftTone(daysLeft(i))}`}>{leftLabel(daysLeft(i))}</span>
+                    </span>
+                    <Icon name="right" size={18} />
                   </button>
                 </li>
               ))}
@@ -337,7 +341,7 @@ function AddSheet({ mode, shot, onClose, onRetake }: { mode: AddMode; shot: { fi
         <p className="problem">食材を読み取れませんでした。{mode === 'text' ? '食材の名前を入れてみてください。' : '明るいところで、全体が入るように撮ってみてください。'}</p>
       ) : (
         <>
-          <p className="hint">ちがうものは × で外せます。日数は目安で、あとからでも直せます。</p>
+          <p className="hint">ちがうものは × で外せます。</p>
           <ul className="rows">
             {found.map((f, idx) => (
               <li key={`${f.name}-${idx}`} className="row row-edit">
@@ -418,7 +422,7 @@ function ItemSheet({ item, onClose }: { item: Item; onClose: () => void }) {
           className="btn btn-line"
           onClick={() => {
             removeItems([item.id]);
-            toast(`${item.name}を冷蔵庫から出しました`);
+            toast(`${item.name}を出しました`, { label: '元に戻す', run: () => restoreItems([item]) });
             onClose();
           }}
         >
